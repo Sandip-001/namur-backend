@@ -3,9 +3,23 @@ const cloudinary = require("cloudinary").v2;
 
 // Upload helper
 const uploadImageToCloudinary = async (filePath) => {
-  const result = await cloudinary.uploader.upload(filePath, { folder: "subadmins" });
+  const result = await cloudinary.uploader.upload(filePath, { folder: "Namur_subadmins" });
   return result.secure_url;
 };
+
+const deleteImageFromCloudinary = async (imageUrl) => {
+  if (!imageUrl) return;
+
+  try {
+    // Cloudinary public_id is the filename without extension
+    const publicId = imageUrl.split("/").pop().split(".")[0];
+
+    await cloudinary.uploader.destroy(`Namur_subadmins/${publicId}`);
+  } catch (error) {
+    console.error("Cloudinary delete error:", error.message);
+  }
+};
+
 
 // Create Subadmin
 exports.createSubadmin = async (req, res) => {
@@ -66,10 +80,12 @@ exports.getSubadminById = async (req, res) => {
   }
 };
 
+
 // Update Subadmin 
 exports.updateSubadmin = async (req, res) => {
   try {
     const { id } = req.params;
+
     const {
       name,
       email,
@@ -86,15 +102,15 @@ exports.updateSubadmin = async (req, res) => {
       return res.status(404).json({ message: "Subadmin not found" });
     }
 
-    let image_url = existing.image_url; // keep old by default
+    let image_url = existing.image_url;
 
-    // If new file uploaded, replace
+    // If new file uploaded → upload & delete old image
     if (req.file) {
+      // delete old
+      await deleteImageFromCloudinary(existing.image_url);
+
+      // upload new
       image_url = await uploadImageToCloudinary(req.file.path);
-    } 
-    // Or if frontend explicitly sent an image url (eg: unchanged)
-    else if (req.body.image_url) {
-      image_url = req.body.image_url;
     }
 
     const updated = await Subadmin.updateSubadmin(id, {
@@ -109,19 +125,37 @@ exports.updateSubadmin = async (req, res) => {
     });
 
     res.status(200).json({ message: "Subadmin updated", subadmin: updated });
+
   } catch (error) {
-    console.error("Error in updateSubadmin:", error.message);
+    console.error("Error in updateSubadmin:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
 
-// Delete Subadmin
+
+// DELETE SUBADMIN
 exports.deleteSubadmin = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await Subadmin.deleteSubadmin(id);
-    res.status(200).json(result);
+
+    // 1️⃣ Find existing subadmin
+    const existing = await Subadmin.getSubadminById(id);
+
+    if (!existing) {
+      return res.status(404).json({ message: "Subadmin not found" });
+    }
+
+    // 2️⃣ Delete image from Cloudinary (if exists)
+    if (existing.image_url) {
+      await deleteImageFromCloudinary(existing.image_url);
+    }
+
+    // 3️⃣ Delete from DB
+    await Subadmin.deleteSubadmin(id);
+
+    res.status(200).json({ message: "Subadmin deleted successfully" });
+
   } catch (error) {
     console.error("Error in deleteSubadmin:", error.message);
     res.status(500).json({ message: "Server error", error: error.message });

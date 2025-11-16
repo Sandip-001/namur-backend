@@ -230,3 +230,48 @@ exports.getUserById = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.updateUserDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      district,
+      taluk,
+      village,
+      panchayat,
+      profession,
+      age,
+      mobile,
+      username,
+    } = req.body;
+
+    // Check if user exists
+    const existing = await User.getUserById(id);
+    if (!existing) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Prepare safe update payload
+    const data = {
+      district,
+      taluk,
+      village,
+      panchayat,
+      profession,
+      age,
+      mobile,
+      username,
+    };
+
+    const updated = await User.updateUserById(id, data);
+
+    res.json({
+      message: "User details updated successfully",
+      user: updated,
+    });
+  } catch (error) {
+    console.error("Update user error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};

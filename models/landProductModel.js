@@ -69,6 +69,33 @@ const LandProduct = {
     return result.rows;
   },
 
+  async exists(user_id, land_id, product_id) {
+    const result = await pool.query(
+      `SELECT id FROM land_products 
+     WHERE user_id=$1 AND land_id=$2 AND product_id=$3`,
+      [user_id, land_id, product_id]
+    );
+    return result.rows.length > 0;
+  },
+
+  async getTotalFoodAcres(user_id, land_id, excludeId = null) {
+    let query = `
+    SELECT COALESCE(SUM(acres), 0) AS total
+    FROM land_products
+    WHERE user_id = $1 AND land_id = $2 AND category = 'Food'
+  `;
+
+    const params = [user_id, land_id];
+
+    if (excludeId) {
+      query += " AND id != $3";
+      params.push(excludeId);
+    }
+
+    const result = await pool.query(query, params);
+    return Number(result.rows[0].total) || 0;
+  },
+
   async update(id, data) {
     const fields = Object.entries(data).filter(
       ([key, value]) => value !== undefined

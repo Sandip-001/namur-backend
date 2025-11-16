@@ -27,7 +27,12 @@ const pool = require("../config/db");
 
 const User = {
   // save firebase user on first login. client can pass username and profile_image_url (Google image)
-  async findOrCreate(firebase_uid, email, username = null, profile_image_url = null) {
+  async findOrCreate(
+    firebase_uid,
+    email,
+    username = null,
+    profile_image_url = null
+  ) {
     let result = await pool.query("SELECT * FROM users WHERE firebase_uid=$1", [
       firebase_uid,
     ]);
@@ -66,7 +71,16 @@ const User = {
   },
 
   async getAllUsers() {
-    const result = await pool.query("SELECT * FROM users ORDER BY id DESC");
+    const result = await pool.query(`
+    SELECT 
+      u.*,
+      COUNT(l.id) AS land_count
+    FROM users u
+    LEFT JOIN lands l ON u.id = l.user_id
+    GROUP BY u.id
+    ORDER BY u.id DESC
+  `);
+
     return result.rows;
   },
 
@@ -122,6 +136,31 @@ const User = {
        WHERE firebase_uid=$3 RETURNING *`,
       [url, publicId, firebase_uid]
     );
+    return result.rows[0];
+  },
+
+  async updateUserById(id, data) {
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    for (const key in data) {
+      if (data[key] !== undefined && data[key] !== null) {
+        fields.push(`${key}=$${index}`);
+        values.push(data[key]);
+        index++;
+      }
+    }
+
+    if (fields.length === 0) return null;
+
+    values.push(id);
+
+    const result = await pool.query(
+      `UPDATE users SET ${fields.join(", ")} WHERE id=$${index} RETURNING *`,
+      values
+    );
+
     return result.rows[0];
   },
 };
