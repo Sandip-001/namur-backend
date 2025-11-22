@@ -10,6 +10,7 @@ const pool = require("../config/db");
       image_public_id TEXT,
       category_id INT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
       subcategory_id INT NOT NULL REFERENCES subcategories(id) ON DELETE CASCADE,
+      breeds TEXT[] DEFAULT '{}',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -21,20 +22,25 @@ const Product = {
     image_url,
     image_public_id,
     category_id,
-    subcategory_id
+    subcategory_id,
+    breeds = []
   ) {
     const result = await pool.query(
-      `INSERT INTO products (name, image_url, image_public_id, category_id, subcategory_id) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [name, image_url, image_public_id, category_id, subcategory_id]
+      `INSERT INTO products (name, image_url, image_public_id, category_id, subcategory_id, breeds) 
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [name, image_url, image_public_id, category_id, subcategory_id, breeds]
     );
     return result.rows[0];
   },
 
   async getProducts() {
     const result = await pool.query(`
-      SELECT p.id, p.name, p.image_url, p.category_id, c.name AS category_name,
-             p.subcategory_id, s.name AS subcategory_name, p.created_at
+      SELECT p.id, p.name, p.image_url, p.image_public_id,
+             p.category_id, c.name AS category_name,
+             p.subcategory_id, s.name AS subcategory_name,
+             p.breeds,  
+             p.created_at
       FROM products p
       JOIN categories c ON p.category_id = c.id
       JOIN subcategories s ON p.subcategory_id = s.id
@@ -46,24 +52,47 @@ const Product = {
   async getProductById(id) {
     const result = await pool.query(
       `SELECT p.*, c.name AS category_name, s.name AS subcategory_name
-     FROM products p
-     JOIN categories c ON p.category_id = c.id
-     JOIN subcategories s ON p.subcategory_id = s.id
-     WHERE p.id = $1`,
+       FROM products p
+       JOIN categories c ON p.category_id = c.id
+       JOIN subcategories s ON p.subcategory_id = s.id
+       WHERE p.id = $1`,
       [id]
     );
     return result.rows[0];
   },
 
+  async getProductsByCategoryName(categoryName) {
+    const result = await pool.query(
+      `
+    SELECT p.id, p.name, p.image_url, p.image_public_id,
+           p.category_id, c.name AS category_name,
+           p.subcategory_id, s.name AS subcategory_name,
+           p.breeds,
+           p.created_at
+    FROM products p
+    JOIN categories c ON p.category_id = c.id
+    JOIN subcategories s ON p.subcategory_id = s.id
+    WHERE LOWER(c.name) = LOWER($1)
+    ORDER BY p.id DESC
+    `,
+      [categoryName]
+    );
+
+    return result.rows;
+  },
+
   async getProductsBySubcategory(subcategory_id) {
     const result = await pool.query(
-      `SELECT p.id, p.name, p.image_url, p.category_id, c.name AS category_name,
-            p.subcategory_id, s.name AS subcategory_name, p.created_at
-     FROM products p
-     JOIN categories c ON p.category_id = c.id
-     JOIN subcategories s ON p.subcategory_id = s.id
-     WHERE p.subcategory_id = $1
-     ORDER BY p.id DESC`,
+      `SELECT p.id, p.name, p.image_url, p.image_public_id,
+              p.category_id, c.name AS category_name,
+              p.subcategory_id, s.name AS subcategory_name,
+              p.breeds,
+              p.created_at
+       FROM products p
+       JOIN categories c ON p.category_id = c.id
+       JOIN subcategories s ON p.subcategory_id = s.id
+       WHERE p.subcategory_id = $1
+       ORDER BY p.id DESC`,
       [subcategory_id]
     );
     return result.rows;
@@ -79,18 +108,21 @@ const Product = {
       image_public_id: fields.image_public_id || existing.image_public_id,
       category_id: fields.category_id || existing.category_id,
       subcategory_id: fields.subcategory_id || existing.subcategory_id,
+      breeds: fields.breeds || existing.breeds,
     };
 
     const result = await pool.query(
       `UPDATE products
-       SET name=$1, image_url=$2, image_public_id=$3, category_id=$4, subcategory_id=$5
-       WHERE id=$6 RETURNING *`,
+       SET name=$1, image_url=$2, image_public_id=$3,
+           category_id=$4, subcategory_id=$5, breeds=$6
+       WHERE id=$7 RETURNING *`,
       [
         updated.name,
         updated.image_url,
         updated.image_public_id,
         updated.category_id,
         updated.subcategory_id,
+        updated.breeds,
         id,
       ]
     );
@@ -101,7 +133,7 @@ const Product = {
   async deleteProduct(id) {
     const product = await this.getProductById(id);
     await pool.query("DELETE FROM products WHERE id=$1", [id]);
-    return product; // Return deleted product to remove from Cloudinary
+    return product;
   },
 };
 

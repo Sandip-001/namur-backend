@@ -7,98 +7,157 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 exports.uploadMiddleware = upload.single("image");
 
-// Create news
+// Helper for Cloudinary upload
+const uploadToCloudinary = (file) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "Namur_news" },
+      (error, result) => (error ? reject(error) : resolve(result))
+    );
+    stream.end(file.buffer);
+  });
+};
+
+// ==========================================
+// CREATE NEWS
+// ==========================================
 exports.createNews = async (req, res) => {
   try {
     const { title, url } = req.body;
-    if (!title || !url) {
+    const actorName = req.body.actorName || req.user?.name || "Unknown";
+    const actorRole = req.body.actorRole || req.user?.role || "Unknown";
+
+    if (!title || !url)
       return res.status(400).json({ message: "Title and URL are required" });
-    }
 
     let imageUrl = null;
+    let imageId = null;
+
     if (req.file) {
-      const result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "news" },
-          (error, result) => (error ? reject(error) : resolve(result))
-        );
-        stream.end(req.file.buffer);
-      });
+      const result = await uploadToCloudinary(req.file);
       imageUrl = result.secure_url;
+      imageId = result.public_id;
     }
 
-    const news = await News.createNews(title, url, imageUrl);
+    const news = await News.createNews(title, url, imageUrl, imageId);
 
-    // 🔹 Log the creation
-    // await NewsLog.createLog(news.id, "create", null, news);
+    await NewsLog.createLog(
+      news.id,
+      title,
+      url,
+      "create",
+      actorName,
+      actorRole
+    );
 
     res.status(201).json({ message: "News created", news });
   } catch (err) {
-    console.error("Error creating news:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// Get all news
+// ==========================================
+// GET ALL NEWS
+// ==========================================
 exports.getNews = async (req, res) => {
   try {
-    const newsList = await News.getNews();
-    res.json(newsList);
+    const list = await News.getNews();
+    res.json(list);
   } catch (err) {
-    console.error("Error fetching news:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// Update news
+// ==========================================
+// UPDATE NEWS
+// ==========================================
 exports.updateNews = async (req, res) => {
   try {
     const { id } = req.params;
     const { title, url } = req.body;
-    if (!title || !url) {
-      return res.status(400).json({ message: "Title and URL are required" });
-    }
 
-    const oldNews = await News.getNewsById(id); // 🔹 Fetch old record
+    const actorName = req.body.actorName || req.user?.name || "Unknown";
+    const actorRole = req.body.actorRole || req.user?.role || "Unknown";
 
-    let imageUrl;
+    const news = await News.getNewsById(id);
+    if (!news) return res.status(404).json({ message: "News not found" });
+
+    let imageUrl = news.image_url;
+    let imageId = news.image_id;
+
+    // If new image uploaded, replace old image
     if (req.file) {
-      const result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "news" },
-          (error, result) => (error ? reject(error) : resolve(result))
-        );
-        stream.end(req.file.buffer);
-      });
-      imageUrl = result.secure_url;
+      // delete old image from cloudinary (optional)
+      if (news.image_id) {
+        try {
+          await cloudinary.uploader.destroy(news.image_id);
+        } catch (err) {
+          console.log("Cloudinary delete failed:", err.message);
+        }
+      }
+
+      const uploaded = await uploadToCloudinary(req.file);
+      imageUrl = uploaded.secure_url;
+      imageId = uploaded.public_id;
     }
 
-    const updated = await News.updateNews(id, title, url, imageUrl);
+    const updated = await News.updateNews(id, {
+      title,
+      url,
+      image_url: imageUrl,
+      image_id: imageId,
+    });
 
-    // 🔹 Log the update
-    // await NewsLog.createLog(id, "update", oldNews, updated);
+    // Log action
+    await NewsLog.createLog(
+      id,
+      updated.title,
+      updated.url,
+      "update",
+      actorName,
+      actorRole
+    );
 
     res.json({ message: "News updated", news: updated });
   } catch (err) {
-    console.error("Error updating news:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// Delete news
+// ==========================================
+// DELETE NEWS
+// ==========================================
 exports.deleteNews = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const oldNews = await News.getNewsById(id); // 🔹 Fetch before delete
-    const result = await News.deleteNews(id);
+    const actorName = req.body.actorName || req.user?.name || "Unknown";
+    const actorRole = req.body.actorRole || req.user?.role || "Unknown";
 
-    // 🔹 Log the deletion
-    await NewsLog.createLog(id, "delete", oldNews, null);
+    const news = await News.getNewsById(id);
+    if (!news) return res.status(404).json({ message: "News not found" });
 
-    res.json(result);
+    // FIRST: Create log BEFORE deleting the news
+    await NewsLog.createLog(
+      id,
+      news.title,
+      news.url,
+      "delete",
+      actorName,
+      actorRole
+    );
+
+    // THEN delete cloudinary image
+    if (news.image_id) {
+      await cloudinary.uploader.destroy(news.image_id);
+    }
+
+    // FINALLY delete the news row
+    const deleted = await News.deleteNews(id);
+
+    res.json({ message: "News deleted", deleted });
   } catch (err) {
-    console.error("Error deleting news:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
+
