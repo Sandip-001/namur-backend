@@ -249,11 +249,31 @@ exports.deleteLandProduct = async (req, res) => {
 exports.getLandProducts = async (req, res) => {
   try {
     const { user_id, land_id } = req.params;
+    const { category_name } = req.query; // optional
 
-    const list = await LandProduct.getAllByLand(user_id, land_id);
+    const list = await LandProduct.getAllByLand(
+      user_id,
+      land_id,
+      category_name || null
+    );
 
     res.json(list);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+
+exports.getByUserWithOptionalCategory = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const { category_name } = req.query;
+
+    const data = await LandProduct.getAllByUser(user_id, category_name);
+
+    return res.json(data);
+  } catch (err) {
+    console.error("Error in getByUser:", err);
+    return res.status(500).json({ error: "Server error" });
   }
 };

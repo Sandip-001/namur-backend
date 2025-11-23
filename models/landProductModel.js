@@ -49,23 +49,60 @@ const LandProduct = {
     return result.rows[0];
   },
 
-  async getAllByLand(user_id, land_id) {
-    const result = await pool.query(
-      `SELECT 
-        lp.*, 
-        p.name AS product_name,
-        p.image_url AS product_image_url,
-        c.name AS category_name,
-        l.land_name  -- land name added
-     FROM land_products lp
-     JOIN products p ON lp.product_id = p.id
-     JOIN categories c ON p.category_id = c.id
-     JOIN lands l ON lp.land_id = l.id
-     WHERE lp.user_id = $1 AND lp.land_id = $2
-     ORDER BY lp.id DESC`,
-      [user_id, land_id]
-    );
+  async getAllByLand(user_id, land_id, category_name = null) {
+    let query = `
+    SELECT 
+      lp.*, 
+      p.name AS product_name,
+      p.image_url AS product_image_url,
+      c.name AS category_name,
+      l.land_name
+    FROM land_products lp
+    JOIN products p ON lp.product_id = p.id
+    JOIN categories c ON p.category_id = c.id
+    JOIN lands l ON lp.land_id = l.id
+    WHERE lp.user_id = $1 AND lp.land_id = $2
+  `;
 
+    let values = [user_id, land_id];
+
+    // if category_name provided → apply filter
+    if (category_name) {
+      query += ` AND LOWER(c.name) = LOWER($3)`;
+      values.push(category_name);
+    }
+
+    query += ` ORDER BY lp.id DESC`;
+
+    const result = await pool.query(query, values);
+    return result.rows;
+  },
+
+  async getAllByUser(user_id, category_name = null) {
+    let query = `
+    SELECT 
+      lp.*,
+      p.name AS product_name,
+      p.image_url AS product_image_url,
+      c.name AS category_name,
+      l.land_name 
+    FROM land_products lp
+    JOIN products p ON lp.product_id = p.id
+    JOIN categories c ON p.category_id = c.id
+    JOIN lands l ON lp.land_id = l.id
+    WHERE lp.user_id = $1
+  `;
+
+    const params = [user_id];
+
+    if (category_name) {
+      query += " AND c.name ILIKE $2";
+      params.push(category_name);
+    }
+
+    query += " ORDER BY lp.id DESC";
+
+    const result = await pool.query(query, params);
     return result.rows;
   },
 

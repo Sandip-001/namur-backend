@@ -44,6 +44,10 @@ app.use("/api/products", productRoutes);
 const adRoutes = require("./routes/adRoutes");
 app.use("/api/ads", adRoutes);
 
+// server.js (example)
+const adScheduler = require("./jobs/adScheduler");
+adScheduler.start();
+
 const subadminRoutes = require("./routes/subadminRoutes");
 app.use("/api/subadmins", subadminRoutes);
 
