@@ -4,21 +4,36 @@ const pool = require("../config/db");
 const Ad = require("../models/adModel");
 const AdLogs = require("../models/AdLogs");
 
-// Helper to activate scheduled ads where scheduled_at is today (00:00)
+/**
+ * Helper: Get today's date in IST (no time)
+ * Example: '2025-11-24'
+ */
+function getTodayIST() {
+  const todayIST = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  todayIST.setHours(0, 0, 0, 0);
+  return todayIST.toISOString().split("T")[0];
+}
+
+/**
+ * 1️⃣ Activate ads scheduled for today (schedule_at = today's date)
+ */
 async function activateScheduledAds() {
   try {
-    const todayIST = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
-    todayIST.setHours(0, 0, 0, 0);
+    const today = getTodayIST(); // yyyy-mm-dd
 
     const { rows } = await pool.query(
-      `SELECT * FROM ads WHERE post_type='schedule' AND status='pending' AND DATE(scheduled_at AT TIME ZONE 'Asia/Kolkata') = $1`,
-      [todayIST.toISOString().split("T")[0]]
+      `SELECT * FROM ads 
+       WHERE post_type = 'schedule'
+       AND status = 'pending'
+       AND DATE(scheduled_at AT TIME ZONE 'Asia/Kolkata') = $1`,
+      [today]
     );
 
     for (const ad of rows) {
       await Ad.activateAd(ad.id);
+
       await AdLogs.createLog({
         ad_id: ad.id,
         action: "activate_scheduled",
@@ -27,26 +42,25 @@ async function activateScheduledAds() {
         payload: { scheduled_at: ad.scheduled_at },
       });
     }
+
+    console.log(`✔ Activated ${rows.length} scheduled ads`);
   } catch (err) {
     console.error("activateScheduledAds error:", err);
   }
 }
 
-// Helper to expire ads where expiry_date <= today (delete)
+/**
+ * Logic: expiry_date < TOMORROW (not <= today)
+ */
 async function expireAds() {
   try {
-    const todayIST = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
-    todayIST.setHours(0, 0, 0, 0);
-
-    const istDate = todayIST.toISOString().split("T")[0];
+    const today = getTodayIST(); // yyyy-mm-dd
 
     const { rows } = await pool.query(
       `SELECT * FROM ads 
-       WHERE expiry_date IS NOT NULL 
-       AND DATE(expiry_date AT TIME ZONE 'Asia/Kolkata') <= $1`,
-      [istDate]
+   WHERE expiry_date IS NOT NULL
+   AND DATE(expiry_date AT TIME ZONE 'Asia/Kolkata') = $1`,
+      [today]
     );
 
     for (const ad of rows) {
@@ -60,18 +74,39 @@ async function expireAds() {
 
       await pool.query("DELETE FROM ads WHERE id=$1", [ad.id]);
     }
+
+    console.log(`✔ Expired ${rows.length} ads`);
   } catch (err) {
     console.error("expireAds error:", err);
   }
 }
 
+async function runOnce() {
+  console.log("🔄 Manually triggering scheduler...");
+  await activateScheduledAds();
+  await expireAds();
+  console.log("✔ Manual scheduler run complete");
+}
+
 module.exports = {
   start: () => {
-    cron.schedule("35 18 * * *", async () => {
-      console.log("Running ad scheduler at 12:05 AM IST");
-      await activateScheduledAds();
-      await expireAds();
-    });
-    console.log("Ad scheduler started (daily at 12:05 IST)");
+    /**
+     * RUN DAILY AT 00:00 AM IST
+     * UTC = IST - 5:30
+     * 00:00 IST = 18:30 UTC (previous day)
+     */
+    cron.schedule(
+      "30 18 * * *",
+      async () => {
+        console.log("⏳ Running ad scheduler (00:00 AM IST)");
+        await activateScheduledAds();
+        await expireAds();
+      },
+      { timezone: "UTC" }
+    );
+
+    console.log("✔ Ad Scheduler started (Runs daily at 00:00 AM IST)");
   },
+
+  runOnce,
 };

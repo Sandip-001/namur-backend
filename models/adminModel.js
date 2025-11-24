@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 
-// Create Admin Table if not 
+// Create Admin Table if not exists
 (async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admins (
@@ -31,7 +31,12 @@ const AdminModel = {
     const result = await pool.query(`SELECT * FROM admins WHERE email=$1`, [email]);
     return result.rows[0];
   },
+
+  // ✅ NEW FUNCTION
+  async getAdminById(id) {
+    const result = await pool.query(`SELECT * FROM admins WHERE id=$1`, [id]);
+    return result.rows[0];
+  }
 };
 
 module.exports = AdminModel;
-

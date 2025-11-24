@@ -177,36 +177,74 @@ const Ad = {
     return result.rows[0];
   },
 
-  async getAdsByDistrictsAndFilters({ districts = [], ad_type, status }) {
-    // districts is an array. Matches ANY of the districts
-    let query = `SELECT * FROM ads WHERE 1=1`;
+  async getAdsWithFilters({ productId, status, ad_type, districts = [] }) {
+    let query = `
+    SELECT 
+      a.*,
+      c.name AS category_name,
+      sc.name AS subcategory_name,
+      p.name AS product_name,
+
+      CASE WHEN a.created_by_role = 'user' THEN u.username
+           WHEN a.created_by_role = 'subadmin' THEN sa.name
+           WHEN a.created_by_role = 'admin' THEN ad.name
+      END AS creator_name,
+
+      CASE WHEN a.created_by_role = 'user' THEN u.email
+           WHEN a.created_by_role = 'subadmin' THEN sa.email
+           WHEN a.created_by_role = 'admin' THEN ad.email
+      END AS creator_email,
+
+      u.mobile AS user_mobile,
+      u.district AS user_district,
+      u.taluk AS user_taluk,
+      u.village AS user_village,
+      u.panchayat AS user_panchayat,
+      u.profile_image_url AS user_profile_image
+    FROM ads a
+    LEFT JOIN categories c ON a.category_id = c.id
+    LEFT JOIN subcategories sc ON a.subcategory_id = sc.id
+    LEFT JOIN products p ON a.product_id = p.id
+    LEFT JOIN users u ON (a.created_by_role = 'user' AND a.creator_id = u.id)
+    LEFT JOIN subadmins sa ON (a.created_by_role = 'subadmin' AND a.creator_id = sa.id)
+    LEFT JOIN admins ad ON (a.created_by_role = 'admin' AND a.creator_id = ad.id)
+    WHERE 1=1
+  `;
+
     const params = [];
     let idx = 1;
 
-    if (districts && districts.length) {
-      query += ` AND (`;
-      districts.forEach((d, i) => {
-        query += ` $${idx} = ANY(districts)`;
-        if (i < districts.length - 1) query += " OR ";
-        params.push(d);
-        idx++;
-      });
-      query += ` )`;
-    }
-
-    if (ad_type) {
-      query += ` AND ad_type = $${idx}`;
-      params.push(ad_type);
-      idx++;
-    }
-
     if (status) {
-      query += ` AND status = $${idx}`;
+      query += ` AND a.status = $${idx}`;
       params.push(status);
       idx++;
     }
 
-    query += ` ORDER BY id DESC`;
+    if (productId) {
+      query += ` AND a.product_id = $${idx}`;
+      params.push(productId);
+      idx++;
+    }
+
+    if (ad_type) {
+      query += ` AND a.ad_type = $${idx}`;
+      params.push(ad_type);
+      idx++;
+    }
+
+    if (districts.length) {
+      query += ` AND (`;
+      districts.forEach((d, i) => {
+        query += `$${idx} = ANY(a.districts)`;
+        params.push(d);
+        idx++;
+        if (i < districts.length - 1) query += " OR ";
+      });
+      query += ` )`;
+    }
+
+    query += ` ORDER BY a.id DESC`;
+
     const result = await pool.query(query, params);
     return result.rows;
   },

@@ -2,6 +2,8 @@
 const Ad = require("../models/adModel");
 const AdLogs = require("../models/AdLogs");
 const User = require("../models/userModel");
+const Admin = require("../models/adminModel");
+const Subadmin = require("../models/subadminModel");
 const cloudinary = require("../config/cloudinaryConfig");
 const multer = require("multer");
 const Category = require("../models/categoryModel");
@@ -63,12 +65,24 @@ exports.createAd = async (req, res) => {
       return res.status(400).json({ message: "Invalid category" });
     }
 
-    // restrict blocked user
-    const creator = await User.getUserById(Number(creator_id));
-    if (!creator)
-      return res.status(404).json({ message: "Creator user not found" });
-    if (creator.is_blocked)
-      return res.status(403).json({ message: "User is blocked" });
+    // Validate creator based on role
+    let creator = null;
+
+    if (created_by_role === "user") {
+      creator = await User.getUserById(Number(creator_id));
+      if (!creator) return res.status(404).json({ message: "User not found" });
+      if (creator.is_blocked)
+        return res.status(403).json({ message: "User is blocked" });
+    } else if (created_by_role === "subadmin") {
+      creator = await Subadmin.getSubadminById(Number(creator_id));
+      if (!creator)
+        return res.status(404).json({ message: "Subadmin not found" });
+    } else if (created_by_role === "admin") {
+      creator = await Admin.getAdminById(Number(creator_id));
+      if (!creator) return res.status(404).json({ message: "Admin not found" });
+    } else {
+      return res.status(400).json({ message: "Invalid created_by_role" });
+    }
 
     // parse districts into array
     let districtsArr = [];
@@ -84,19 +98,30 @@ exports.createAd = async (req, res) => {
     let pgDistrictArray = `{${districtsArr.map((d) => `"${d}"`).join(",")}}`;
 
     // parse dates
-    let scheduledAt = scheduled_at ? new Date(scheduled_at) : null;
-    if (scheduled_at && isNaN(scheduledAt.getTime())) {
-      // support dd-mm-yyyy
-      const parts = scheduled_at.split("-");
-      if (parts.length === 3)
-        scheduledAt = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00Z`);
+    function parseToMidnight(dateString) {
+      if (!dateString) return null;
+
+      let parts = dateString.split("-");
+      let yyyy, mm, dd;
+
+      if (parts[0].length === 4) {
+        // yyyy-mm-dd
+        yyyy = parts[0];
+        mm = parts[1];
+        dd = parts[2];
+      } else {
+        // dd-mm-yyyy
+        dd = parts[0];
+        mm = parts[1];
+        yyyy = parts[2];
+      }
+
+      return new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
     }
-    let expiryAt = expiry_date ? new Date(expiry_date) : null;
-    if (expiry_date && isNaN(expiryAt.getTime())) {
-      const parts = expiry_date.split("-");
-      if (parts.length === 3)
-        expiryAt = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00Z`);
-    }
+
+    // ------- Replace your parsing -------
+    let scheduledAt = parseToMidnight(scheduled_at);
+    let expiryAt = parseToMidnight(expiry_date);
 
     // determine initial status
     let status = "pending";
@@ -246,33 +271,35 @@ exports.getAdById = async (req, res) => {
 };
 
 // GET ads by district(s) + optional filters
-exports.getByDistricts = async (req, res) => {
+exports.filterAds = async (req, res) => {
   try {
-    let { districts, ad_type, status } = req.query;
-    // districts can be comma-separated or JSON array
+    const { productId, status, ad_type, districts } = req.query;
+
     let districtsArr = [];
-    if (!districts) districtsArr = [];
-    else {
+    if (districts) {
       try {
         districtsArr = JSON.parse(districts);
         if (!Array.isArray(districtsArr))
-          districtsArr = districts.split(",").map((s) => s.trim());
+          districtsArr = districts.split(",").map((d) => d.trim());
       } catch {
-        districtsArr = districts.split(",").map((s) => s.trim());
+        districtsArr = districts.split(",").map((d) => d.trim());
       }
     }
 
-    const ads = await Ad.getAdsByDistrictsAndFilters({
-      districts: districtsArr,
-      ad_type,
+    const ads = await Ad.getAdsWithFilters({
+      productId,
       status,
+      ad_type,
+      districts: districtsArr
     });
+
     res.json(ads);
   } catch (err) {
-    console.error("getByDistricts:", err);
+    console.error("filterAds error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 // Update ad
 exports.updateAd = async (req, res) => {
@@ -295,12 +322,24 @@ exports.updateAd = async (req, res) => {
       currentImages = [];
     }
 
-    // restriction: if creator is blocked
-    const creator = await User.getUserById(existing.creator_id);
-    if (!creator)
-      return res.status(404).json({ message: "Creator user not found" });
-    if (creator.is_blocked)
-      return res.status(403).json({ message: "Creator is blocked" });
+    // Validate creator based on role
+    let creator = null;
+
+    if (existing.created_by_role === "user") {
+      creator = await User.getUserById(Number(existing.creator_id));
+      if (!creator) return res.status(404).json({ message: "User not found" });
+      if (existing.creator.is_blocked)
+        return res.status(403).json({ message: "User is blocked" });
+    } else if (existing.created_by_role === "subadmin") {
+      creator = await Subadmin.getSubadminById(Number(existing.creator_id));
+      if (!creator)
+        return res.status(404).json({ message: "Subadmin not found" });
+    } else if (existing.created_by_role === "admin") {
+      creator = await Admin.getAdminById(Number(existing.creator_id));
+      if (!creator) return res.status(404).json({ message: "Admin not found" });
+    } else {
+      return res.status(400).json({ message: "Invalid created_by_role" });
+    }
 
     // collect incoming fields
     const {
@@ -404,10 +443,10 @@ exports.updateAd = async (req, res) => {
           .status(400)
           .json({ message: "Breed is required for Food/Animal category" });
       }
-      if (!unit) {
-        return res
-          .status(400)
-          .json({ message: "Unit is required for Food/Animal category" });
+      // Only require unit if it's missing BOTH in request & existing
+      const finalUnit = unit ?? existing.unit;
+      if (!finalUnit) {
+        return res.status(400).json({ message: "Unit is required" });
       }
     }
 
@@ -436,14 +475,49 @@ exports.updateAd = async (req, res) => {
 
     // determine status changes (postnow/schedule logic)
     let status = existing.status;
-    if (post_type === "postnow") {
-      status = "active";
-      // set expiry if not supplied: 15 days from now
-      if (!expiry_date && !existing.expiry_date) {
-        const dt = new Date();
-        expiry_date = new Date(dt.getTime() + 15 * 24 * 60 * 60 * 1000);
+
+    // parse dates
+    function parseDateToMidnight(dateString) {
+      if (!dateString) return null;
+
+      let parts = dateString.split("-");
+      let yyyy, mm, dd;
+
+      if (parts[0].length === 4) {
+        yyyy = parts[0];
+        mm = parts[1];
+        dd = parts[2];
+      } else {
+        dd = parts[0];
+        mm = parts[1];
+        yyyy = parts[2];
       }
-    } else if (post_type === "schedule" && scheduled_at) {
+
+      // Force IST midnight
+      return new Date(`${yyyy}-${mm}-${dd}T00:00:00+05:30`);
+    }
+
+    // ------- Replace your parsing -------
+    let scheduledAt = parseDateToMidnight(scheduled_at);
+    let expiryAt = parseDateToMidnight(expiry_date);
+
+    // Handle post_type changes
+    if (post_type === "postnow") {
+      // Clear scheduled_at
+      scheduledAt = null;
+
+      // Auto create expiry = TODAY + 15 days (IST)
+      const nowIST = new Date(
+        new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+      );
+      nowIST.setHours(0, 0, 0, 0);
+      nowIST.setDate(nowIST.getDate() + 15);
+      expiryAt = nowIST;
+
+      status = "active";
+    }
+
+    if (post_type === "schedule") {
       status = "pending";
     }
 
@@ -461,10 +535,8 @@ exports.updateAd = async (req, res) => {
       districts: districtsArr, // TEXT[]
       ad_type: ad_type ?? existing.ad_type,
       post_type: post_type ?? existing.post_type,
-      scheduled_at: scheduled_at
-        ? new Date(scheduled_at)
-        : existing.scheduled_at,
-      expiry_date: expiry_date ? new Date(expiry_date) : existing.expiry_date,
+      scheduled_at: scheduledAt,
+      expiry_date: expiryAt ,
 
       // 🔥 MUST STRINGIFY JSONB FIELDS
       images: remaining,
@@ -498,12 +570,24 @@ exports.deleteAd = async (req, res) => {
     const ad = await Ad.getAdById(id);
     if (!ad) return res.status(404).json({ message: "Ad not found" });
 
-    // restriction: check creator not blocked
-    const creator = await User.getUserById(ad.creator_id);
-    if (!creator)
-      return res.status(404).json({ message: "Creator user not found" });
-    if (creator.is_blocked)
-      return res.status(403).json({ message: "Creator is blocked" });
+    // Validate creator based on role
+    let creator = null;
+
+    if (ad.created_by_role === "user") {
+      creator = await User.getUserById(ad.creator_id);
+      if (!creator) return res.status(404).json({ message: "User not found" });
+      if (creator.is_blocked)
+        return res.status(403).json({ message: "User is blocked" });
+    } else if (ad.created_by_role === "subadmin") {
+      creator = await Subadmin.getSubadminById(ad.creator_id);
+      if (!creator)
+        return res.status(404).json({ message: "Subadmin not found" });
+    } else if (ad.created_by_role === "admin") {
+      creator = await Admin.getAdminById(ad.creator_id);
+      if (!creator) return res.status(404).json({ message: "Admin not found" });
+    } else {
+      return res.status(400).json({ message: "Invalid created_by_role" });
+    }
 
     // log deletion
     await AdLogs.createLog({
