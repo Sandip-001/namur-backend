@@ -177,7 +177,14 @@ const Ad = {
     return result.rows[0];
   },
 
-  async getAdsWithFilters({ productId, status, ad_type, districts = [] }) {
+  async getAdsWithFilters({
+    productId,
+    status,
+    ad_type,
+    districts = [],
+    userType,
+    userId,
+  }) {
     let query = `
     SELECT 
       a.*,
@@ -213,6 +220,17 @@ const Ad = {
 
     const params = [];
     let idx = 1;
+
+    // ⭐ USER RESTRICTION FILTER — IMPORTANT
+    if (userType && userId) {
+      query += ` AND a.created_by_role = $${idx}`;
+      params.push(userType);
+      idx++;
+
+      query += ` AND a.creator_id = $${idx}`;
+      params.push(userId);
+      idx++;
+    }
 
     if (status) {
       query += ` AND a.status = $${idx}`;

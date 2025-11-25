@@ -273,7 +273,7 @@ exports.getAdById = async (req, res) => {
 // GET ads by district(s) + optional filters
 exports.filterAds = async (req, res) => {
   try {
-    const { productId, status, ad_type, districts } = req.query;
+    const { productId, status, ad_type, districts, userType, userId } = req.query;
 
     let districtsArr = [];
     if (districts) {
@@ -290,10 +290,13 @@ exports.filterAds = async (req, res) => {
       productId,
       status,
       ad_type,
-      districts: districtsArr
+      districts: districtsArr,
+      userType,
+      userId
     });
 
     res.json(ads);
+
   } catch (err) {
     console.error("filterAds error:", err);
     res.status(500).json({ message: "Server error" });
