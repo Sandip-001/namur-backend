@@ -273,7 +273,8 @@ exports.getAdById = async (req, res) => {
 // GET ads by district(s) + optional filters
 exports.filterAds = async (req, res) => {
   try {
-    const { productId, status, ad_type, districts, userType, userId } = req.query;
+    const { productId, status, ad_type, districts, userType, userId } =
+      req.query;
 
     let districtsArr = [];
     if (districts) {
@@ -292,17 +293,15 @@ exports.filterAds = async (req, res) => {
       ad_type,
       districts: districtsArr,
       userType,
-      userId
+      userId,
     });
 
     res.json(ads);
-
   } catch (err) {
     console.error("filterAds error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
-
 
 // Update ad
 exports.updateAd = async (req, res) => {
@@ -331,7 +330,7 @@ exports.updateAd = async (req, res) => {
     if (existing.created_by_role === "user") {
       creator = await User.getUserById(Number(existing.creator_id));
       if (!creator) return res.status(404).json({ message: "User not found" });
-      if (existing.creator.is_blocked)
+      if (creator.is_blocked)
         return res.status(403).json({ message: "User is blocked" });
     } else if (existing.created_by_role === "subadmin") {
       creator = await Subadmin.getSubadminById(Number(existing.creator_id));
@@ -501,26 +500,31 @@ exports.updateAd = async (req, res) => {
     }
 
     // ------- Replace your parsing -------
-    let scheduledAt = parseDateToMidnight(scheduled_at);
-    let expiryAt = parseDateToMidnight(expiry_date);
+    // Keep existing dates unless explicitly provided
+    let scheduledAt =
+      scheduled_at !== undefined
+        ? parseDateToMidnight(scheduled_at)
+        : existing.scheduled_at;
 
-    // Handle post_type changes
-    if (post_type === "postnow") {
-      // Clear scheduled_at
+    let expiryAt =
+      expiry_date !== undefined
+        ? parseDateToMidnight(expiry_date)
+        : existing.expiry_date;
+
+    const postTypeChanged = post_type && post_type !== existing.post_type;
+
+    if (postTypeChanged && post_type === "postnow") {
       scheduledAt = null;
-
-      // Auto create expiry = TODAY + 15 days (IST)
       const nowIST = new Date(
         new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
       );
       nowIST.setHours(0, 0, 0, 0);
       nowIST.setDate(nowIST.getDate() + 15);
       expiryAt = nowIST;
-
       status = "active";
     }
 
-    if (post_type === "schedule") {
+    if (postTypeChanged && post_type === "schedule") {
       status = "pending";
     }
 
@@ -539,7 +543,7 @@ exports.updateAd = async (req, res) => {
       ad_type: ad_type ?? existing.ad_type,
       post_type: post_type ?? existing.post_type,
       scheduled_at: scheduledAt,
-      expiry_date: expiryAt ,
+      expiry_date: expiryAt,
 
       // 🔥 MUST STRINGIFY JSONB FIELDS
       images: remaining,
