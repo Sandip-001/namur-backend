@@ -67,6 +67,12 @@ app.use("/api/adLog", adLogRoutes);
 const cropCalendarRoutes = require("./routes/cropCalendarRoutes");
 app.use("/api/crop-calendars", cropCalendarRoutes);
 
+const cropPlanRoutes = require("./routes/cropPlanRoutes");
+app.use("/api/crop-plan", cropPlanRoutes);
+
+const notificationRoutes = require("./routes/notificationRoutes");
+app.use("/api/notifications", notificationRoutes);
+
 app.get("/", (req, res) => {
   res.send("API is running...");
 });
