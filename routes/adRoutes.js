@@ -23,6 +23,8 @@ router.get("/filter", adController.filterAds);
 // Get ad by id
 router.get("/:id", adController.getAdById);
 
+router.get("/active/by-district", adController.getRecentAdsByDistrict);
+
 
 
 router.get("/test/scheduler", async (req, res) => {

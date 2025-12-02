@@ -7,6 +7,8 @@ const Subadmin = require("../models/subadminModel");
 const cloudinary = require("../config/cloudinaryConfig");
 const multer = require("multer");
 const Category = require("../models/categoryModel");
+const { generateAdUID } = require("../helper/utils");
+const pool = require("../config/db");
 
 // multer memory
 const storage = multer.memoryStorage();
@@ -303,12 +305,44 @@ exports.filterAds = async (req, res) => {
   }
 };
 
+
+exports.getRecentAdsByDistrict = async (req, res) => {
+  try {
+    const { district } = req.query;
+
+    if (!district) {
+      return res.status(400).json({
+        error: "district query parameter is required"
+      });
+    }
+
+    const result = await pool.query(`
+      SELECT *
+      FROM ads
+      WHERE status='active'
+      AND $1 = ANY (districts)   -- check district exists in array
+      AND created_at >= NOW() - INTERVAL '48 HOURS'
+      ORDER BY created_at DESC
+    `, [district]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Error fetching recent ads:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
 // Update ad
 exports.updateAd = async (req, res) => {
   try {
     const { id } = req.params;
     const existing = await Ad.getAdById(id);
     if (!existing) return res.status(404).json({ message: "Ad not found" });
+
+    if (!existing.ad_uid) {
+      await Ad.updateAd(id, { ad_uid: generateAdUID() });
+    }
 
     let currentImages = existing.images || [];
 

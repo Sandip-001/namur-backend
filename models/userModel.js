@@ -25,6 +25,27 @@ const pool = require("../config/db");
   `);
 })();
 
+function calculateProfileProgress(user) {
+  let progress = 0;
+
+  const basicFields = [
+    "email",
+    "username",
+    "mobile",
+    "district",
+    "profession",
+    "age",
+  ];
+  const filledBasic = basicFields.filter((f) => user[f]).length;
+  if (filledBasic === basicFields.length) progress = 25;
+
+  if (user.taluk && user.village && user.panchayat) progress = 50;
+  if (parseInt(user.land_count) > 0) progress = 75;
+  if (parseInt(user.land_product_count) > 0) progress = 100;
+
+  return { ...user, profile_progress: progress };
+}
+
 const User = {
   // save firebase user on first login. client can pass username and profile_image_url (Google image)
   async findOrCreate(
@@ -50,8 +71,25 @@ const User = {
 
   // admin
   async getUserById(id) {
-    const result = await pool.query("SELECT * FROM users WHERE id=$1", [id]);
-    return result.rows[0];
+    const result = await pool.query(
+      `
+    SELECT 
+      u.*,
+      COUNT(DISTINCT l.id) AS land_count,
+      COUNT(DISTINCT lp.id) AS land_product_count
+    FROM users u
+    LEFT JOIN lands l ON u.id = l.user_id
+    LEFT JOIN land_products lp ON u.id = lp.user_id
+    WHERE u.id=$1
+    GROUP BY u.id
+  `,
+      [id]
+    );
+
+    const user = result.rows[0];
+    if (!user) return null;
+
+    return calculateProfileProgress(user);
   },
 
   async blockUser(id) {
@@ -74,23 +112,64 @@ const User = {
     const result = await pool.query(`
     SELECT 
       u.*,
-      COUNT(l.id) AS land_count
+      COUNT(DISTINCT l.id) AS land_count,
+      COUNT(DISTINCT lp.id) AS land_product_count
     FROM users u
     LEFT JOIN lands l ON u.id = l.user_id
+    LEFT JOIN land_products lp ON u.id = lp.user_id
     GROUP BY u.id
     ORDER BY u.id DESC
   `);
 
-    return result.rows;
+    return result.rows.map((user) => {
+      let progress = 0;
+
+      // Step 1 — Basic details
+      const basicFields = [
+        "email",
+        "username",
+        "mobile",
+        "district",
+        "profession",
+        "age",
+      ];
+      const filledBasic = basicFields.filter((f) => user[f]).length;
+      if (filledBasic === basicFields.length) progress = 25;
+
+      // Step 2 — Location
+      if (user.taluk && user.village && user.panchayat) progress = 50;
+
+      // Step 3 — Has land
+      if (parseInt(user.land_count) > 0) progress = 75;
+
+      // Step 4 — Has land products
+      if (parseInt(user.land_product_count) > 0) progress = 100;
+
+      return { ...user, profile_progress: progress };
+    });
   },
 
   // user side
   async getUser(firebase_uid) {
     const result = await pool.query(
-      "SELECT * FROM users WHERE firebase_uid=$1",
+      `
+    SELECT 
+      u.*,
+      COUNT(DISTINCT l.id) AS land_count,
+      COUNT(DISTINCT lp.id) AS land_product_count
+    FROM users u
+    LEFT JOIN lands l ON u.id = l.user_id
+    LEFT JOIN land_products lp ON u.id = lp.user_id
+    WHERE u.firebase_uid=$1
+    GROUP BY u.id
+  `,
       [firebase_uid]
     );
-    return result.rows[0];
+
+    const user = result.rows[0];
+    if (!user) return null;
+
+    return calculateProfileProgress(user);
   },
 
   // check mobile uniqueness (returns true if mobile taken by other firebase_uid)

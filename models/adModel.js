@@ -1,11 +1,13 @@
 // models/adModel.js
 const pool = require("../config/db");
+const { generateAdUID } = require("../helper/utils");
 
 // Create ads table if not exists
 (async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ads (
       id SERIAL PRIMARY KEY,
+      ad_uid VARCHAR(20) UNIQUE,
       title VARCHAR(500) NOT NULL,
       category_id INT,
       subcategory_id INT,
@@ -54,13 +56,15 @@ const Ad = {
       status,
     } = adData;
 
+    const ad_uid = generateAdUID();
+
     const result = await pool.query(
       `INSERT INTO ads
     (title, category_id, subcategory_id, product_id, product_name, unit, quantity, price,
     description, districts, ad_type, post_type, scheduled_at, expiry_date, images,
-    created_by_role, creator_id, extra_fields, status)
+    created_by_role, creator_id, extra_fields, status, ad_uid)
    VALUES
-    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
    RETURNING *`,
       [
         title,
@@ -82,6 +86,7 @@ const Ad = {
         creator_id,
         JSON.stringify(extra_fields || {}), // 🔥 **THIS FIXES THE ERROR**
         status || "pending",
+        ad_uid,
       ]
     );
 
