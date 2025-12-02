@@ -245,8 +245,8 @@ const Ad = {
     }
 
     if (ad_type) {
-      query += ` AND a.ad_type = $${idx}`;
-      params.push(ad_type);
+      query += ` AND LOWER(a.ad_type) = LOWER($${idx})`;
+      params.push(ad_type.toLowerCase());
       idx++;
     }
 
