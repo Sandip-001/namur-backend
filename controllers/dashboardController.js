@@ -1,30 +1,27 @@
-const Admin = require("../models/adminModel");
-const Subadmin = require("../models/subadminModel");
-const Category = require("../models/categoryModel");
-const Subcategory = require("../models/subcategoryModel");
-const Product = require("../models/productModel");
-const Ad = require("../models/adModel");
+const pool = require("../config/db");
 
-// Get Dashboard Stats
 exports.getDashboardStats = async (req, res) => {
   try {
-    const categories = await Category.getCategories();
-    const subcategories = await Subcategory.getSubcategories();
-    const products = await Product.getProducts();
-    const ads = await Ad.getAds();   // ✅ fixed method name
-    const admins = await Admin.getAdmins();
-    const subadmins = await Subadmin.getSubadmins();
+    const usersCountQuery = pool.query("SELECT COUNT(*) AS total FROM users");
+    const adsCountQuery = pool.query("SELECT COUNT(*) AS total FROM ads");
+    const productsCountQuery = pool.query("SELECT COUNT(*) AS total FROM products");
+    const newsCountQuery = pool.query("SELECT COUNT(*) AS total FROM news");
 
-    res.json({
-      totalCategories: categories.length,
-      totalSubcategories: subcategories.length,
-      totalProducts: products.length,
-      totalAds: ads.length,
-      totalAdmins: admins.length,
-      totalSubadmins: subadmins.length,
+    const results = await Promise.all([
+      usersCountQuery,
+      adsCountQuery,
+      productsCountQuery,
+      newsCountQuery,
+    ]);
+
+    return res.json({
+      totalUsers: Number(results[0].rows[0].total),
+      totalAds: Number(results[1].rows[0].total),
+      totalProducts: Number(results[2].rows[0].total),
+      totalNews: Number(results[3].rows[0].total),
     });
   } catch (err) {
-    console.error("Error in getDashboardStats:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.error("🔥 Dashboard Stats Error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 };

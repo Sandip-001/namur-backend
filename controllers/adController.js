@@ -47,6 +47,7 @@ exports.createAd = async (req, res) => {
       created_by_role,
       creator_id,
       extra_fields, // optional JSON string
+      video_url
     } = req.body;
 
     // basic required
@@ -230,6 +231,7 @@ exports.createAd = async (req, res) => {
       creator_id,
       extra_fields: extra,
       status,
+      video_url,
     });
 
     // create log
@@ -395,6 +397,7 @@ exports.updateAd = async (req, res) => {
       expiry_date,
       existingImages, // JSON array of public_ids to keep
       extra_fields,
+      video_url, // ⭐ NEW
     } = req.body;
 
     const category = await Category.getCategoryById(
@@ -584,6 +587,7 @@ exports.updateAd = async (req, res) => {
       extra_fields: extra,
 
       status,
+      video_url: video_url ?? existing.video_url,
     };
 
     const updated = await Ad.updateAd(id, payload);

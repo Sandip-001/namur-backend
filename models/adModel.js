@@ -8,6 +8,7 @@ const { generateAdUID } = require("../helper/utils");
     CREATE TABLE IF NOT EXISTS ads (
       id SERIAL PRIMARY KEY,
       ad_uid VARCHAR(20) UNIQUE,
+      video_url VARCHAR(500),
       title VARCHAR(500) NOT NULL,
       category_id INT,
       subcategory_id INT,
@@ -54,6 +55,7 @@ const Ad = {
       creator_id,
       extra_fields,
       status,
+      video_url,
     } = adData;
 
     const ad_uid = generateAdUID();
@@ -62,9 +64,9 @@ const Ad = {
       `INSERT INTO ads
     (title, category_id, subcategory_id, product_id, product_name, unit, quantity, price,
     description, districts, ad_type, post_type, scheduled_at, expiry_date, images,
-    created_by_role, creator_id, extra_fields, status, ad_uid)
+    created_by_role, creator_id, extra_fields, status, ad_uid, video_url)
    VALUES
-    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
    RETURNING *`,
       [
         title,
@@ -87,6 +89,7 @@ const Ad = {
         JSON.stringify(extra_fields || {}), // 🔥 **THIS FIXES THE ERROR**
         status || "pending",
         ad_uid,
+        video_url || null,
       ]
     );
 

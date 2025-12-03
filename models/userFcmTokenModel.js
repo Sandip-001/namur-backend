@@ -12,7 +12,6 @@ const pool = require("../config/db");
   `);
 })();
 
-
 const UserFcmToken = {
   async upsertToken(user_id, fcm_token) {
     // Insert if not exists, else ignore; we maintain unique token
@@ -42,6 +41,20 @@ const UserFcmToken = {
     const idxs = params.map((_, i) => `$${i + 1}`).join(",");
     const q = `SELECT fcm_token FROM user_fcm_tokens WHERE user_id IN (${idxs})`;
     const res = await pool.query(q, params);
+    return res.rows.map((r) => r.fcm_token);
+  },
+
+  async getTokensByDistricts(districts = []) {
+    if (!districts.length) return [];
+
+    const q = `
+    SELECT DISTINCT uft.fcm_token
+    FROM user_fcm_tokens uft
+    JOIN users u ON u.id = uft.user_id
+    WHERE u.district = ANY($1)
+  `;
+
+    const res = await pool.query(q, [districts]);
     return res.rows.map((r) => r.fcm_token);
   },
 

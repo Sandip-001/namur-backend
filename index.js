@@ -41,6 +41,9 @@ app.use("/api/subcategories", subcategoryRoutes);
 const productRoutes = require("./routes/productRoutes");
 app.use("/api/products", productRoutes);
 
+const enquiryRoutes = require("./routes/productEnquiryRoutes");
+app.use("/api/enquiry", enquiryRoutes);
+
 const adRoutes = require("./routes/adRoutes");
 app.use("/api/ads", adRoutes);
 

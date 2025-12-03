@@ -25,5 +25,7 @@ router.post("/admin/block/:id", userController.blockUser);
 router.post("/admin/unblock/:id", userController.unblockUser);
 router.get("/admin/user/:id", userController.getUserById);
 router.put("/admin/update/:id", userController.updateUserDetails);
+router.get("/admin/district-activity", userController.getDistrictActivity);
+router.get("/admin/insights", userController.getInsights)
 
 module.exports = router;
