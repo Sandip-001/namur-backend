@@ -94,7 +94,7 @@ exports.verifyOtp = async (req, res) => {
 // 4. Update extra profile details
 exports.updateAdditionalDetails = async (req, res) => {
   try {
-    const { firebase_uid, taluk, village, panchayat } = req.body;
+    const { firebase_uid, district, taluk, village, panchayat } = req.body;
 
     if (!firebase_uid) return res.status(400).json({ message: "firebase_uid required" });
 
@@ -106,6 +106,7 @@ exports.updateAdditionalDetails = async (req, res) => {
 
     const user = await User.updateAdditionalDetails(
       firebase_uid,
+      district,
       taluk || null,
       village || null,
       panchayat || null

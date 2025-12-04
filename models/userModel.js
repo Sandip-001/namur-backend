@@ -199,11 +199,11 @@ const User = {
     return result.rows[0];
   },
 
-  async updateAdditionalDetails(firebase_uid, taluk, village, panchayat) {
+  async updateAdditionalDetails(firebase_uid, district, taluk, village, panchayat) {
     const result = await pool.query(
-      `UPDATE users SET taluk=$1, village=$2, panchayat=$3 
-       WHERE firebase_uid=$4 RETURNING *`,
-      [taluk, village, panchayat, firebase_uid]
+      `UPDATE users SET taluk=$1, village=$2, panchayat=$3, district=$4
+       WHERE firebase_uid=$5 RETURNING *`,
+      [taluk, village, panchayat, district, firebase_uid]
     );
     return result.rows[0];
   },
