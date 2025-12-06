@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const userController = require("../controllers/userController");
 const multer = require("multer");
+const barcodeController = require("../controllers/barcodeController");
 
 // multer configured to save temp uploads to /uploads (you have this)
 const upload = multer({ dest: "uploads/" });
@@ -27,5 +28,12 @@ router.get("/admin/user/:id", userController.getUserById);
 router.put("/admin/update/:id", userController.updateUserDetails);
 router.get("/admin/district-activity", userController.getDistrictActivity);
 router.get("/admin/insights", userController.getInsights)
+
+// Get Barcode Image
+router.get("/barcode/:id", barcodeController.getQRCodeImage);
+
+// Scan Barcode (return user details)
+router.get("/barcode/scan/:code", barcodeController.scanBarcode);
+
 
 module.exports = router;

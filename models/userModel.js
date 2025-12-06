@@ -1,5 +1,7 @@
 // models/userModel.js
 const pool = require("../config/db");
+const crypto = require("crypto");
+
 
 // Create table if not exists (keeps existing structure)
 (async () => {
@@ -11,6 +13,7 @@ const pool = require("../config/db");
       username VARCHAR(255),
       mobile VARCHAR(15),
       district VARCHAR(150),
+      barcode_value VARCHAR(255) UNIQUE,
       profession VARCHAR(150),
       age INT,
       taluk VARCHAR(150),
@@ -46,6 +49,10 @@ function calculateProfileProgress(user) {
   return { ...user, profile_progress: progress };
 }
 
+function generateBarcode() {
+  return "BC-" + crypto.randomBytes(5).toString("hex").toUpperCase();
+}
+
 const User = {
   // save firebase user on first login. client can pass username and profile_image_url (Google image)
   async findOrCreate(
@@ -59,11 +66,12 @@ const User = {
     ]);
 
     if (result.rowCount > 0) return result.rows[0];
+    const barcodeValue = generateBarcode(); // NEW 🔥
 
     result = await pool.query(
-      `INSERT INTO users (firebase_uid, email, username, profile_image_url) 
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [firebase_uid, email, username, profile_image_url]
+      `INSERT INTO users (firebase_uid, email, username, profile_image_url, barcode_value) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [firebase_uid, email, username, profile_image_url, barcodeValue]
     );
 
     return result.rows[0];
