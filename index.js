@@ -44,6 +44,9 @@ app.use("/api/products", productRoutes);
 const enquiryRoutes = require("./routes/productEnquiryRoutes");
 app.use("/api/enquiry", enquiryRoutes);
 
+const landMapRoutes = require("./routes/landMapRoutes");
+app.use("/api/land-maps", landMapRoutes);
+
 const adRoutes = require("./routes/adRoutes");
 app.use("/api/ads", adRoutes);
 
