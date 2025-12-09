@@ -182,6 +182,12 @@ exports.uploadExcel = async (req, res) => {
       inserted.push(saved);
     }
 
+    if (inserted.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Duplicate or invalid data. No records inserted" });
+    }
+
     return res.json({
       message: "Upload processed",
       inserted: inserted.length,
@@ -226,88 +232,98 @@ exports.delete = async (req, res) => {
 exports.getMatchedLandData = async (req, res) => {
   try {
     const query = `
-  SELECT 
-    u.id AS user_id,
-    u.username,
-    u.mobile,
-    u.profile_image_url,
+      SELECT 
+        lm.id AS map_id,
+        lm.district AS map_district,
+        lm.taluk AS map_taluk,
+        lm.village AS map_village,
+        lm.survey_no AS map_survey_no,
+        lm.hissa_no AS map_hissa_no,
+        lm.area_acres,
+        lm.coords_latlng,
+        lm.created_at,
 
-    l.id AS land_id,
-    l.land_name,
-    l.district AS land_district,
-    l.taluk AS land_taluk,
-    l.village AS land_village,
-    l.survey_no,
-    l.hissa_no,
-    l.farm_size,
+        u.id AS user_id,
+        u.username,
+        u.email,
+        u.mobile,
+        u.profile_image_url,
 
-    lm.area_acres,
-    lm.coords_latlng,
+        l.id AS land_id,
+        l.land_name,
+        l.farm_size,
 
-    p.name AS product_name,
-    p.image_url AS product_image,
-    lp.acres AS product_acres,
+        p.name AS product_name,
+        p.image_url AS product_image,
+        lp.acres AS product_acres,
 
-    c.name AS category_name,
-    s.name AS subcategory_name
+        c.name AS category_name,
+        s.name AS subcategory_name
 
-  FROM lands l
-  JOIN users u ON u.id = l.user_id
+      FROM land_maps lm
+      LEFT JOIN lands l ON 
+        LOWER(l.district) = LOWER(lm.district) AND
+        LOWER(l.taluk) = LOWER(lm.taluk) AND
+        LOWER(l.village) = LOWER(lm.village) AND
+        LOWER(l.survey_no) = LOWER(lm.survey_no) AND
+        LOWER(l.hissa_no) = LOWER(lm.hissa_no)
 
-  -- STRICT LAND MAP MATCHING
-  JOIN land_maps lm ON 
-    LOWER(l.district) = LOWER(lm.district) AND
-    LOWER(l.taluk) = LOWER(lm.taluk) AND
-    LOWER(l.village) = LOWER(lm.village) AND
-    LOWER(l.survey_no) = LOWER(lm.survey_no) AND
-    LOWER(l.hissa_no) = LOWER(lm.hissa_no)
-
-  LEFT JOIN land_products lp ON lp.land_id = l.id
-  LEFT JOIN products p ON p.id = lp.product_id
-  LEFT JOIN categories c ON p.category_id = c.id
-  LEFT JOIN subcategories s ON p.subcategory_id = s.id
-
-  -- Ensure only FOOD category products
-  WHERE LOWER(c.name) = 'food'
-`;
+      LEFT JOIN users u ON u.id = l.user_id
+      LEFT JOIN land_products lp ON lp.land_id = l.id
+      LEFT JOIN products p ON p.id = lp.product_id
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN subcategories s ON p.subcategory_id = s.id
+    `;
 
     const result = await pool.query(query);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No matched lands found",
-      });
-    }
-
-    // Group multiple products under each land
     const groupedData = {};
+
     result.rows.forEach((row) => {
-      if (!groupedData[row.land_id]) {
-        groupedData[row.land_id] = {
+      if (!groupedData[row.map_id]) {
+        groupedData[row.map_id] = {
+          map_id: row.map_id,
+          district: row.map_district,
+          taluk: row.map_taluk,
+          village: row.map_village,
+          survey_no: row.map_survey_no,
+          hissa_no: row.map_hissa_no,
+          area_acres: row.area_acres,
+          coordinates: row.coords_latlng,
+          created_at: row.created_at,
+
+          matched_lands: []
+        };
+      }
+
+      // If no matched user land → no need to push user data
+      if (!row.user_id) return;
+
+      // Check if this land already added
+      let landEntry = groupedData[row.map_id].matched_lands.find(
+        (land) => land.land_id === row.land_id
+      );
+
+      if (!landEntry) {
+        landEntry = {
           user_id: row.user_id,
           username: row.username,
+          email: row.email,
           mobile: row.mobile,
           profile_image_url: row.profile_image_url,
 
           land_id: row.land_id,
           land_name: row.land_name,
-          district: row.land_district,
-          taluk: row.land_taluk,
-          village: row.land_village,
-          survey_no: row.survey_no,
-          hissa_no: row.hissa_no,
           farm_size: row.farm_size,
 
-          area_acres_from_map: row.area_acres,
-          coordinates: row.coords_latlng,
-
-          food_products: [],
+          food_products: []
         };
+        groupedData[row.map_id].matched_lands.push(landEntry);
       }
 
-      if (row.product_name) {
-        groupedData[row.land_id].food_products.push({
+      // Only push FOOD category items
+      if (row.category_name && row.category_name.toLowerCase() === "food") {
+        landEntry.food_products.push({
           product_name: row.product_name,
           product_image: row.product_image,
           acres: row.product_acres,
@@ -319,11 +335,11 @@ exports.getMatchedLandData = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Matched land data retrieved successfully",
+      message: "Land Map data with user match",
       data: Object.values(groupedData),
     });
   } catch (error) {
-    console.error("Matching API Error:", error);
+    console.error("Land Map Matching Error:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",
