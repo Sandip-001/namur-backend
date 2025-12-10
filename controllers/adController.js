@@ -308,7 +308,7 @@ exports.filterAds = async (req, res) => {
 };
 
 
-exports.getRecentAdsByDistrict = async (req, res) => {
+exports.getRecentAdsByDistrict = async (req, res) => { 
   try {
     const { district } = req.query;
 
@@ -318,19 +318,96 @@ exports.getRecentAdsByDistrict = async (req, res) => {
       });
     }
 
-    const result = await pool.query(`
-      SELECT *
-      FROM ads
-      WHERE status='active'
-      AND $1 = ANY (districts)   -- check district exists in array
-      AND created_at >= NOW() - INTERVAL '48 HOURS'
-      ORDER BY created_at DESC
-    `, [district]);
+    const query = `
+      SELECT 
+        a.*,
+        c.name AS category_name,
+        s.name AS subcategory_name
+      FROM ads a
+      LEFT JOIN categories c ON a.category_id = c.id
+      LEFT JOIN subcategories s ON a.subcategory_id = s.id
+      WHERE a.status = 'active'
+      AND $1 = ANY (a.districts)
+      AND a.created_at >= NOW() - INTERVAL '48 HOURS'
+      ORDER BY a.created_at DESC
+    `;
+
+    const result = await pool.query(query, [district]);
 
     res.json(result.rows);
+
   } catch (err) {
     console.error("❌ Error fetching recent ads:", err);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
+exports.getFilteredAds = async (req, res) => {
+  try {
+    const { product_id, district, sort, breed } = req.query;
+
+    if (!product_id) {
+      return res.status(400).json({
+        success: false,
+        message: "product_id is required"
+      });
+    }
+
+    // Base query
+    let query = `
+      SELECT 
+        a.*,
+        c.name AS category_name,
+        s.name AS subcategory_name
+      FROM ads a
+      LEFT JOIN categories c ON a.category_id = c.id
+      LEFT JOIN subcategories s ON a.subcategory_id = s.id
+      WHERE a.status = 'active'
+      AND a.product_id = $1
+    `;
+
+    const params = [product_id];
+    let paramIndex = 2;
+
+    // 🔹 District filter
+    if (district) {
+      query += ` AND $${paramIndex} = ANY (a.districts) `;
+      params.push(district);
+      paramIndex++;
+    }
+
+    // 🔹 Breed filter → matches extra_fields JSONB
+    if (breed) {
+      query += ` AND a.extra_fields->>'breed' ILIKE $${paramIndex} `;
+      params.push(`%${breed}%`);
+      paramIndex++;
+    }
+
+    // 🔹 Sorting logic
+    if (sort === "price_low_to_high") {
+      query += ` ORDER BY a.price ASC `;
+    } else if (sort === "price_high_to_low") {
+      query += ` ORDER BY a.price DESC `;
+    } else {
+      query += ` ORDER BY a.created_at DESC `;
+    }
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      count: result.rows.length,
+      data: result.rows
+    });
+
+  } catch (error) {
+    console.error("❌ Ads filter error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message
+    });
   }
 };
 

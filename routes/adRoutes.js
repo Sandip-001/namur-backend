@@ -20,6 +20,8 @@ router.get("/", adController.getAds);
 // Get by districts + filters
 router.get("/filter", adController.filterAds);
 
+router.get("/sort-filter", adController.getFilteredAds);
+
 // Get ad by id
 router.get("/:id", adController.getAdById);
 
