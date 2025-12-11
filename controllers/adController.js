@@ -308,7 +308,7 @@ exports.filterAds = async (req, res) => {
 };
 
 
-exports.getRecentAdsByDistrict = async (req, res) => { 
+exports.getRecentAdsByDistrict = async (req, res) => {
   try {
     const { district } = req.query;
 
@@ -321,14 +321,51 @@ exports.getRecentAdsByDistrict = async (req, res) => {
     const query = `
       SELECT 
         a.*,
+
+        -- Creator Name
+        CASE WHEN a.created_by_role = 'user' THEN u.username
+             WHEN a.created_by_role = 'subadmin' THEN sa.name
+             WHEN a.created_by_role = 'admin' THEN ad.name
+        END AS creator_name,
+
+        -- Creator Email
+        CASE WHEN a.created_by_role = 'user' THEN u.email
+             WHEN a.created_by_role = 'subadmin' THEN sa.email
+             WHEN a.created_by_role = 'admin' THEN ad.email
+        END AS creator_email,
+
+        -- User Details
+        CASE WHEN a.created_by_role = 'user' THEN u.mobile END AS user_mobile,
+        CASE WHEN a.created_by_role = 'user' THEN u.district END AS user_district,
+        CASE WHEN a.created_by_role = 'user' THEN u.taluk END AS user_taluk,
+        CASE WHEN a.created_by_role = 'user' THEN u.village END AS user_village,
+        CASE WHEN a.created_by_role = 'user' THEN u.panchayat END AS user_panchayat,
+        CASE WHEN a.created_by_role = 'user' THEN u.profile_image_url END AS user_profile_image,
+
+        -- Subadmin Details
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.number END AS subadmin_number,
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.address END AS subadmin_address,
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.districts END AS subadmin_districts,
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.image_url END AS subadmin_image,
+
+        -- Admin Details
+        CASE WHEN a.created_by_role = 'admin' THEN ad.name END AS admin_name,
+        CASE WHEN a.created_by_role = 'admin' THEN ad.email END AS admin_email,
+
         c.name AS category_name,
         s.name AS subcategory_name
+        
       FROM ads a
+      LEFT JOIN users u ON (a.created_by_role = 'user' AND a.creator_id = u.id)
+      LEFT JOIN subadmins sa ON (a.created_by_role = 'subadmin' AND a.creator_id = sa.id)
+      LEFT JOIN admins ad ON (a.created_by_role = 'admin' AND a.creator_id = ad.id)
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN subcategories s ON a.subcategory_id = s.id
+
       WHERE a.status = 'active'
       AND $1 = ANY (a.districts)
       AND a.created_at >= NOW() - INTERVAL '48 HOURS'
+
       ORDER BY a.created_at DESC
     `;
 
@@ -337,7 +374,7 @@ exports.getRecentAdsByDistrict = async (req, res) => {
     res.json(result.rows);
 
   } catch (err) {
-    console.error("❌ Error fetching recent ads:", err);
+    console.error("❌ Error fetching recent ads with role details:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -345,7 +382,8 @@ exports.getRecentAdsByDistrict = async (req, res) => {
 
 exports.getFilteredAds = async (req, res) => {
   try {
-    const { product_id, district, sort, breed } = req.query;
+    const { product_id, district, sort } = req.query;
+    let { breed } = req.query;
 
     if (!product_id) {
       return res.status(400).json({
@@ -354,19 +392,71 @@ exports.getFilteredAds = async (req, res) => {
       });
     }
 
-    // Base query
+    // 🔹 Parse breed if passed as JSON string: ["Roho","Katla"]
+    if (breed) {
+      try {
+        // If it's a JSON array convert to JS array
+        if (typeof breed === "string" && breed.startsWith("[")) {
+          breed = JSON.parse(breed);
+        } else {
+          breed = [breed]; // single value
+        }
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid breed format. Send JSON array."
+        });
+      }
+    }
+
     let query = `
       SELECT 
         a.*,
+
+        -- Creator Name
+        CASE WHEN a.created_by_role = 'user' THEN u.username
+             WHEN a.created_by_role = 'subadmin' THEN sa.name
+             WHEN a.created_by_role = 'admin' THEN ad.name
+        END AS creator_name,
+
+        -- Creator Email
+        CASE WHEN a.created_by_role = 'user' THEN u.email
+             WHEN a.created_by_role = 'subadmin' THEN sa.email
+             WHEN a.created_by_role = 'admin' THEN ad.email
+        END AS creator_email,
+
+        -- User Details
+        CASE WHEN a.created_by_role = 'user' THEN u.mobile END AS user_mobile,
+        CASE WHEN a.created_by_role = 'user' THEN u.district END AS user_district,
+        CASE WHEN a.created_by_role = 'user' THEN u.taluk END AS user_taluk,
+        CASE WHEN a.created_by_role = 'user' THEN u.village END AS user_village,
+        CASE WHEN a.created_by_role = 'user' THEN u.panchayat END AS user_panchayat,
+        CASE WHEN a.created_by_role = 'user' THEN u.profile_image_url END AS user_profile_image,
+
+        -- Subadmin Details
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.number END AS subadmin_number,
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.address END AS subadmin_address,
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.districts END AS subadmin_districts,
+        CASE WHEN a.created_by_role = 'subadmin' THEN sa.image_url END AS subadmin_image,
+
+        -- Admin Details
+        CASE WHEN a.created_by_role = 'admin' THEN ad.name END AS admin_name,
+        CASE WHEN a.created_by_role = 'admin' THEN ad.email END AS admin_email,
+
         c.name AS category_name,
         s.name AS subcategory_name
+        
       FROM ads a
+      LEFT JOIN users u ON (a.created_by_role = 'user' AND a.creator_id = u.id)
+      LEFT JOIN subadmins sa ON (a.created_by_role = 'subadmin' AND a.creator_id = sa.id)
+      LEFT JOIN admins ad ON (a.created_by_role = 'admin' AND a.creator_id = ad.id)
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN subcategories s ON a.subcategory_id = s.id
+
       WHERE a.status = 'active'
       AND a.product_id = $1
     `;
-
+    
     const params = [product_id];
     let paramIndex = 2;
 
@@ -377,14 +467,22 @@ exports.getFilteredAds = async (req, res) => {
       paramIndex++;
     }
 
-    // 🔹 Breed filter → matches extra_fields JSONB
-    if (breed) {
-      query += ` AND a.extra_fields->>'breed' ILIKE $${paramIndex} `;
-      params.push(`%${breed}%`);
-      paramIndex++;
+    // 🔹 Multi-Breed Filter
+    if (breed && breed.length > 0) {
+      query += ` AND (`;
+
+      breed.forEach((b, index) => {
+        query += ` a.extra_fields->>'breed' ILIKE $${paramIndex} `;
+        params.push(`%${b}%`);
+        paramIndex++;
+
+        if (index < breed.length - 1) query += ` OR `;
+      });
+
+      query += `) `;
     }
 
-    // 🔹 Sorting logic
+    // 🔹 Sorting
     if (sort === "price_low_to_high") {
       query += ` ORDER BY a.price ASC `;
     } else if (sort === "price_high_to_low") {
@@ -410,6 +508,7 @@ exports.getFilteredAds = async (req, res) => {
     });
   }
 };
+
 
 
 // Update ad

@@ -132,6 +132,44 @@ exports.getProductsBySubcategory = async (req, res) => {
 };
 
 
+// Get product by id
+exports.getProductDetailsById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
+      });
+    }
+
+    const product = await Product.getProductById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: product,
+    });
+
+  } catch (error) {
+    console.error("❌ Error in getProductDetailsById:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+
 // ✅ Update product (partial + Cloudinary + category rules)
 exports.updateProduct = async (req, res) => {
   try {
